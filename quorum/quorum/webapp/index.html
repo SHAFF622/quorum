@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quorum</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='6' width='7' height='20' rx='2' fill='%2317834F'/%3E%3Crect x='12.5' y='6' width='7' height='20' rx='2' fill='%23F2C230'/%3E%3Crect x='22' y='6' width='7' height='20' rx='2' fill='%23C8352C'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: an app. Top bar with three tabs; the main tab is a two-pane checker (build a finding / see the verdict). */
+:root{
+  --bg:#EEF1F6; --surface:#FFFFFF; --raised:#F7F8FB; --ink:#111B30; --muted:#5B6678; --line:#DCE2EB;
+  --accent:#2C47D6; --accent-ink:#FFFFFF; --accent-soft:#E7EBFD;
+  --go:#14804C; --go-soft:#DDF2E6; --warn:#946200; --warn-fill:#F2C230; --warn-soft:#FCF1CF;
+  --stop:#C5332A; --stop-soft:#FBE2DF; --idle:#A0AABA; --shadow:0 1px 2px rgba(17,27,48,.06),0 8px 24px rgba(17,27,48,.06);
+  --display:"Bricolage Grotesque","Avenir Next","Segoe UI",system-ui,sans-serif;
+  --body:"Atkinson Hyperlegible","Segoe UI",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --bg:#0B111C; --surface:#141C2B; --raised:#1A2335; --ink:#E9EDF5; --muted:#9AA5B7; --line:#273146;
+  --accent:#8EA0FF; --accent-ink:#0B111C; --accent-soft:#1D2646;
+  --go:#4CC48B; --go-soft:#10291D; --warn:#F0C43C; --warn-fill:#F0C43C; --warn-soft:#2C240F;
+  --stop:#F26A60; --stop-soft:#311715; --idle:#5C677A; --shadow:none; color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--body)}
+h1,h2,h3{font-family:var(--display);margin:0;line-height:1.15;text-wrap:balance}
+p{margin:0}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+
+.bar{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar-in{max-width:1240px;margin:0 auto;padding:10px max(16px,env(safe-area-inset-left));display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.brand{display:flex;gap:10px;align-items:center;font-family:var(--display);font-weight:800;font-size:21px}
+.brand i{width:9px;height:14px;border-radius:2px;display:inline-block}
+.g{background:var(--go)}.y{background:var(--warn-fill)}.r{background:var(--stop)}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{border:0;background:none;padding:8px 14px;border-radius:8px;font-weight:700;color:var(--muted);cursor:pointer}
+nav button[aria-selected="true"]{background:var(--accent-soft);color:var(--accent)}
+.chip-status{margin-left:auto;font-size:13px;border:1px solid var(--line);border-radius:999px;padding:4px 12px;color:var(--muted)}
+
+main{max-width:1240px;margin:0 auto;padding:24px max(16px,env(safe-area-inset-left)) 60px}
+.screen{display:grid;gap:20px}
+.headline{display:grid;gap:6px}
+.headline h1{font-size:clamp(26px,3.2vw,36px);font-weight:800}
+.headline p{color:var(--muted);font-size:17px;max-width:52em}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow);display:grid;gap:16px;min-width:0}
+.card > *{min-width:0;max-width:100%}
+/* chart palette: categorical colors for groups, independent of the card colors */
+:root{--c1:#2F6FE4;--c2:#E2762B;--c3:#2E9E6A;--c4:#8E44C9;--c5:#D04F7A;--c6:#1FA2B8;--c7:#B08A1E;--c8:#7C8799}
+@media (prefers-color-scheme: dark){:root{--c1:#6E9BFF;--c2:#F29A57;--c3:#5CC795;--c4:#B98AE8;--c5:#EE85A8;--c6:#5ACADB;--c7:#D9B54A;--c8:#98A3B5}}
+.about{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:860px){.about{grid-template-columns:1fr}}
+.about div{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:grid;gap:6px;align-content:start}
+.about .k{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.about b{font-family:var(--display);font-size:18px;line-height:1.25}
+.about p{font-size:14.5px;color:var(--muted)}
+.dash{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media (max-width:1100px){.dash{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.dash{grid-template-columns:1fr}}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;align-content:start;min-width:0}
+.tile.wide{grid-column:span 2}
+@media (max-width:620px){.tile.wide{grid-column:auto}}
+.tile h3{font-size:14px;text-align:center}
+.tile .note{font-size:13px;color:var(--muted)}
+.tile svg{width:100%;height:auto;display:block}
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media (max-width:760px){.stat-row{grid-template-columns:1fr 1fr}}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.stat b{display:block;font-family:var(--display);font-size:28px;font-weight:800;line-height:1.1}
+.stat span{font-size:13px;color:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.kmpair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:620px){.kmpair{grid-template-columns:1fr}}
+.kmpair > div{background:var(--raised);border-radius:12px;padding:10px;display:grid;gap:6px;min-width:0}
+.kmpair h4{margin:0;font-size:13.5px;text-align:center}
+.charts2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:12px}
+@media (max-width:860px){.charts2{grid-template-columns:1fr}}
+svg text{fill:var(--muted);font-family:var(--body)}
+dialog.code{border:0;padding:0;margin:0 0 0 auto;height:100%;max-height:100%;width:min(820px,100%);background:var(--surface);color:var(--ink);
+  box-shadow:-12px 0 40px rgba(0,0,0,.25)}
+dialog.code::backdrop{background:rgba(10,15,25,.45)}
+dialog.code .inner{display:grid;grid-template-rows:auto auto auto 1fr auto;height:100%}
+dialog.code header{display:flex;justify-content:space-between;align-items:start;gap:12px;padding:16px 18px 8px;border-bottom:1px solid var(--line)}
+dialog.code header h2{font-size:20px}
+dialog.code .close{border:1px solid var(--line);background:var(--raised);border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:700}
+.code-tabs{display:flex;gap:6px;flex-wrap:wrap;padding:10px 18px 0}
+.code-tabs button{border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:6px 12px;font-size:13.5px;font-weight:700;cursor:pointer;color:var(--muted)}
+.code-tabs button[aria-selected="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.code-what{padding:8px 18px 0;font-size:14px;color:var(--muted)}
+pre.codebox{margin:10px 18px;overflow:auto;background:#0F1626;color:#E6EBF5;border-radius:12px;padding:14px 16px;font:13px/1.55 var(--mono);white-space:pre}
+pre.codebox .c{color:#8FA0BC;font-style:italic}pre.codebox .s{color:#9EE6A8}pre.codebox .k{color:#8EB6FF}pre.codebox .n{color:#F5C46B}
+dialog.code footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 18px 16px;border-top:1px solid var(--line);font-size:13.5px;color:var(--muted)}
+button.codebtn{border:1px solid var(--line);background:var(--raised);border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-family:var(--mono);font-size:13.5px}
+button.codebtn:hover{border-color:var(--accent);color:var(--accent)}
+.howto{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:760px){.howto{grid-template-columns:1fr}}
+.howto li{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:4px}
+.howto b{font-family:var(--display);font-size:17px}
+.howto span{font-size:14.5px;color:var(--muted)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:20px;align-items:start}
+@media (max-width:960px){.two{grid-template-columns:1fr}}
+
+.examples{display:flex;gap:8px;flex-wrap:wrap}
+.ex{border:1px solid var(--line);background:var(--raised);border-radius:999px;padding:6px 12px;font-size:14px;cursor:pointer}
+.ex:hover{border-color:var(--accent);color:var(--accent)}
+.label{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+
+.sentence{font-family:var(--display);font-size:clamp(20px,2.3vw,26px);font-weight:600;line-height:2.1}
+.sentence select{width:auto;max-width:100%;text-overflow:ellipsis;font-family:var(--display);font-size:inherit;font-weight:800;border:0;border-bottom:3px solid var(--accent);
+  background:var(--accent-soft);color:var(--accent);border-radius:8px 8px 2px 2px;padding:0 8px;margin:0 2px;cursor:pointer;max-width:100%}
+.preview{font-size:15px;background:var(--raised);border-radius:10px;padding:10px 12px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:7px 14px;font-size:14px;font-weight:700;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+.primary{border:0;border-radius:12px;padding:13px 22px;font-weight:700;font-size:17px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.primary[disabled]{opacity:.55;cursor:wait}
+.error{color:var(--stop);font-weight:700;font-size:15px}
+
+.empty{display:grid;gap:14px;place-items:center;text-align:center;padding:30px 10px;color:var(--muted)}
+.fan{display:flex;gap:10px}
+.fan span{width:44px;height:62px;border-radius:7px;display:block;opacity:.85}
+.fan span:nth-child(1){transform:rotate(-10deg)}.fan span:nth-child(3){transform:rotate(10deg)}
+.verdict{border-radius:14px;padding:18px;display:grid;grid-template-columns:62px 1fr;gap:16px;align-items:center}
+.verdict .flag{width:50px;height:70px;border-radius:7px;transform:rotate(-6deg);box-shadow:0 3px 0 rgba(0,0,0,.15)}
+.verdict.go{background:var(--go-soft)}.verdict.go .flag{background:var(--go)}
+.verdict.warn{background:var(--warn-soft)}.verdict.warn .flag{background:var(--warn-fill)}
+.verdict.stop{background:var(--stop-soft)}.verdict.stop .flag{background:var(--stop)}
+.verdict .call{font-family:var(--display);font-size:28px;font-weight:800;line-height:1.1}
+.verdict.go .call{color:var(--go)}.verdict.warn .call{color:var(--warn)}.verdict.stop .call{color:var(--stop)}
+.verdict p{font-size:16.5px;margin-top:4px}
+.claimline{font-size:15px;color:var(--muted)}
+
+ul.checks{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+ul.checks li{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:10px 4px;border-top:1px solid var(--line)}
+ul.checks li:first-child{border-top:0}
+.ico{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;background:var(--idle)}
+.ico.supports{background:var(--go)}.ico.contests{background:var(--warn-fill);color:#3a2a00}.ico.refutes{background:var(--stop)}
+ul.checks b{font-size:15px}
+ul.checks .what{font-size:15px}
+ul.checks .job{font-size:13px;color:var(--muted)}
+
+.chart{display:grid;gap:10px}
+.crow{display:grid;grid-template-columns:190px 1fr 160px;gap:12px;align-items:center;font-size:14px}
+@media (max-width:620px){.crow{grid-template-columns:1fr 90px}.crow .scale{grid-column:1 / -1;grid-row:2}}
+.scale{position:relative;height:22px}
+.scale .base{position:absolute;left:0;right:0;top:10px;height:2px;background:var(--line)}
+.scale .one{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--muted)}
+.scale .ci{position:absolute;top:9px;height:4px;border-radius:2px;background:var(--idle)}
+.scale .pt{position:absolute;top:4px;width:14px;height:14px;border-radius:50%;transform:translateX(-50%);background:var(--idle);border:2px solid var(--surface)}
+.scale.worse .ci,.scale.worse .pt{background:var(--stop)}
+.scale.better .ci,.scale.better .pt{background:var(--go)}
+.axis{display:grid;grid-template-columns:190px 1fr 160px;gap:12px;font-size:12.5px;color:var(--muted)}
+.axis div{display:flex;justify-content:space-between}
+@media (max-width:620px){.axis{grid-template-columns:1fr}.axis > span{display:none}}
+details.expert summary{cursor:pointer;color:var(--accent);font-size:14px;font-weight:700}
+details.expert p{font-size:13.5px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+
+.recent{display:grid;gap:6px}
+.recent button{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center;text-align:left;border:1px solid var(--line);background:var(--raised);border-radius:10px;padding:8px 10px;cursor:pointer;font-size:14px}
+
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;border-radius:999px;padding:3px 10px;white-space:nowrap;background:var(--raised);color:var(--muted)}
+.pill::before{content:"";width:8px;height:11px;border-radius:2px;background:var(--idle)}
+.pill.go{background:var(--go-soft);color:var(--go)}.pill.go::before{background:var(--go)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}.pill.warn::before{background:var(--warn-fill)}
+.pill.stop{background:var(--stop-soft);color:var(--stop)}.pill.stop::before{background:var(--stop)}
+
+textarea.q{width:100%;min-height:78px;border:2px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--raised);font-size:17px;resize:vertical}
+textarea.q:focus{border-color:var(--accent);outline:none}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.form-grid{grid-template-columns:1fr}}
+.opt{display:grid;gap:6px}
+.opt select{border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--surface)}
+.steps{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+@media (max-width:760px){.steps{grid-template-columns:1fr 1fr}}
+.step{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface);display:grid;gap:2px}
+.step b{font-size:14.5px}.step span{font-size:13px;color:var(--muted)}
+.step .count{font-family:var(--display);font-weight:800;font-size:22px;color:var(--ink)}
+.step.active{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.step.done{border-color:var(--go)}
+.livelog{font-family:var(--mono);font-size:13px;color:var(--muted);background:var(--raised);border-radius:10px;padding:10px 12px;max-height:120px;overflow:auto}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:760px){.summary{grid-template-columns:1fr}}
+.sum{border-radius:12px;padding:14px;display:grid;gap:2px;border:0;cursor:pointer;text-align:left}
+.sum b{font-family:var(--display);font-size:32px;font-weight:800;line-height:1}
+.sum.go{background:var(--go-soft);color:var(--go)}.sum.warn{background:var(--warn-soft);color:var(--warn)}.sum.stop{background:var(--stop-soft);color:var(--stop)}
+.sum[aria-pressed="true"]{outline:3px solid currentColor}
+.catch{border:2px solid var(--warn-fill);background:var(--warn-soft);border-radius:14px;padding:16px;display:grid;gap:6px}
+.catch .big{font-family:var(--display);font-weight:800;font-size:20px}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;font-size:14.5px}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+tr.claim-row{cursor:pointer}
+tr.claim-row:hover td{background:var(--raised)}
+tr.detail td{background:var(--raised)}
+.history{display:grid;gap:10px}
+main:has(#screen-explore:not([hidden])){max-width:1500px}
+.xgrid{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+.xmain{display:grid;gap:20px;min-width:0}
+@media (max-width:1100px){.xgrid{grid-template-columns:1fr}}
+.lit{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto;background:var(--surface);border:1px solid var(--line);
+  border-radius:16px;box-shadow:var(--shadow);padding:16px;display:grid;gap:12px;align-content:start;min-width:0}
+@media (max-width:1100px){.lit{position:static;max-height:none}}
+.lit-head{display:grid;gap:6px}
+.lit-head .label{color:var(--accent)}
+.lit-tabs{width:100%}.lit-tabs button{flex:1}
+.lit-tabs button[aria-selected="true"]{background:var(--ink);color:var(--surface)}
+.lit-pane{display:grid;gap:10px;min-width:0}
+.shelf{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:6px;display:flex;justify-content:space-between}
+.paper{border:1px solid var(--line);border-radius:12px;background:var(--raised);padding:10px 12px;display:grid;gap:6px;min-width:0}
+.paper.cited{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.paper .t{all:unset;cursor:pointer;font-weight:700;font-size:14.5px;line-height:1.3}
+.paper .t:hover{color:var(--accent)}
+.paper .t:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+.paper .meta{font-size:12.5px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.rel{display:grid;grid-template-columns:1fr 34px;gap:8px;align-items:center;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.rel i{display:block;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.rel i b{display:block;height:100%;background:var(--accent);border-radius:3px}
+.tag{font-size:11.5px;font-weight:700;border-radius:999px;padding:1px 8px;background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+.tag.on{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+.passage{font-size:13.5px;line-height:1.45;border-left:3px solid var(--accent);padding:2px 0 2px 10px;color:var(--ink);overflow-wrap:anywhere}
+.passage .src{display:block;font-size:12px;color:var(--muted);margin-bottom:2px}
+.passage mark{background:var(--accent-soft);color:inherit;border-radius:3px;padding:0 2px}
+.paper .links{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:13px}
+.paper .links a,.lit-sources a{color:var(--accent)}
+.linkbtn{all:unset;cursor:pointer;color:var(--accent);font-weight:700;font-size:13px}
+.linkbtn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.reader{display:grid;gap:8px;border-top:1px dashed var(--line);padding-top:8px}
+.sections{display:flex;flex-wrap:wrap;gap:4px}
+.lit-q{min-height:64px;font-size:15px}
+.small-btn{font-size:15px;padding:9px 18px}
+.answer{background:var(--raised);border-radius:12px;padding:12px;font-size:14.5px;display:grid;gap:8px}
+.answer a{color:var(--accent);font-weight:700}
+.drop{display:grid;gap:4px;place-items:center;text-align:center;border:2px dashed var(--line);border-radius:12px;padding:22px 12px;cursor:pointer}
+.drop:hover,.drop.over{border-color:var(--accent)}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.lit-sources{display:grid;gap:4px;border-top:1px solid var(--line);padding-top:10px;color:var(--muted)}
+.cites{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.cites button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:2px 9px;font-size:12px;font-family:var(--mono);cursor:pointer;color:var(--accent)}
+.hitem{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--surface)}
+@media (prefers-reduced-motion:no-preference){.fresh{animation:in .3s ease-out}@keyframes in{from{opacity:.3;transform:translateY(4px)}to{opacity:1;transform:none}}}
+</style>
+</head>
+<body>
+<div class="bar"><div class="bar-in">
+  <div class="brand"><span aria-hidden="true"><i class="g"></i> <i class="y"></i> <i class="r"></i></span>Quorum</div>
+  <nav role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-check" aria-selected="true" aria-controls="screen-check">Check a finding</button>
+    <button role="tab" id="tab-explore" aria-selected="false" aria-controls="screen-explore">Let the AI scientist explore</button>
+    <button role="tab" id="tab-data" aria-selected="false" aria-controls="screen-data">The data</button>
+    <button role="tab" id="tab-history" aria-selected="false" aria-controls="screen-history">History</button>
+  </nav>
+  <span class="chip-status" id="status">Connecting…</span>
+</div></div>
+
+<main>
+  <section class="screen" id="screen-check" role="tabpanel" aria-labelledby="tab-check">
+    <div class="headline">
+      <h1>Is this research finding real?</h1>
+      <p>AI scientists produce findings faster than experts can check them, and about 1 in 5 is wrong. Before anyone spends
+        months in a lab on a finding, check it here: Quorum's referees re-test it on thousands of real breast cancer patients in seconds.</p>
+    </div>
+    <div class="about" aria-label="What Quorum does">
+      <div><span class="k">Who it's for</span><b>Researchers and clinical teams who use AI to study patient data</b>
+        <p>Cancer researchers, hospital data teams, and pharma or biotech groups running AI scientists like Kosmos.</p></div>
+      <div><span class="k">The problem</span><b>AI findings can be confidently wrong</b>
+        <p>The best AI scientist is wrong about 1 in 5 times, and 2 in 5 when it explains results. Checking every claim by hand takes an expert days.</p></div>
+      <div><span class="k">How Quorum solves it</span><b>Independent referees re-check every finding in seconds</b>
+        <p>Each one recomputes the finding from the raw data in a different way. Every finding gets a card with the reason in plain words.</p></div>
+    </div>
+    <ol class="howto" aria-label="How to use">
+      <li><b>1. Pick a finding</b><span>Click an example, or build your own sentence with the blue dropdowns.</span></li>
+      <li><b>2. Press Check</b><span>Independent referees recompute it from the raw patient data, three different ways.</span></li>
+      <li><b>3. Read the card</b><span><span class="pill go">Act on it</span> <span class="pill warn">Check first</span> <span class="pill stop">Set aside</span>, with the reason in plain words.</span></li>
+    </ol>
+
+    <div class="two">
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <span class="label">The finding to check · <span id="ds-note">2,509 patients</span></span>
+          <div class="seg" role="group" aria-label="Dataset">
+            <button type="button" id="ds-metabric" aria-pressed="true" title="2,509 patients, about 10 years of follow-up">METABRIC</button>
+            <button type="button" id="ds-tcga" aria-pressed="false" title="1,084 patients, race and ancestry recorded">TCGA</button>
+          </div>
+        </div>
+
+        <div>
+          <span class="label">Try an example</span>
+          <div class="examples" id="examples" style="margin-top:8px"></div>
+        </div>
+
+        <p class="sentence" id="sentence">
+          Among <select id="b-sub" aria-label="Which patients"></select>,
+          <select id="b-factor" aria-label="Factor"></select>
+          <span id="b-levels"><select id="b-exp" aria-label="Group"></select> compared with <select id="b-ref" aria-label="Comparison group"></select></span>
+          <select id="b-phr" aria-label="Wording"><option value="linked">is linked to</option><option value="causes">causes</option><option value="driver">is a major driver of</option></select>
+          <select id="b-dir" aria-label="Direction"><option value="worse">worse</option><option value="better">better</option></select>
+          survival.
+        </p>
+        <p class="preview"><span class="muted">Reads as:</span> <span id="b-preview"></span></p>
+        <div class="row">
+          <button class="primary" id="b-check" type="button">Check this finding</button>
+          <span class="error" id="b-err" role="alert"></span>
+        </div>
+
+        <div class="recent" id="recentWrap" hidden>
+          <span class="label">Your recent checks</span>
+          <div class="recent" id="recent"></div>
+        </div>
+      </div>
+
+      <div class="card" id="result" aria-live="polite">
+        <div class="empty" id="r-empty">
+          <div class="fan" aria-hidden="true"><span class="g"></span><span class="y"></span><span class="r"></span></div>
+          <h2 style="color:var(--ink)">The verdict appears here</h2>
+          <p>Green: act on it. Yellow: check first, and Quorum says why. Red: set aside.</p>
+        </div>
+        <div id="r-body" hidden style="display:grid;gap:16px">
+          <div class="verdict" id="r-verdict"><div class="flag" aria-hidden="true"></div>
+            <div><div class="call" id="r-call"></div><p id="r-why"></p></div></div>
+          <p class="claimline">“<span id="r-text"></span>”</p>
+          <div>
+            <span class="label">What the referees found</span>
+            <ul class="checks" id="r-checks" style="margin-top:6px"></ul>
+          </div>
+          <div id="r-kmwrap">
+            <span class="label">Survival over time: the two groups this finding compares</span>
+            <div class="kmpair" id="r-km" style="margin-top:6px"></div>
+            <p class="small muted" id="r-kmnote" style="margin-top:6px"></p>
+          </div>
+          <div class="chart" id="r-chartwrap">
+            <span class="label">The evidence: change in risk, each way of checking</span>
+            <div id="r-chart" class="chart"></div>
+            <div class="axis"><span></span><div><span>lower risk</span><span>same</span><span>higher risk</span></div><span></span></div>
+          </div>
+          <div class="row"><button type="button" class="codebtn" id="r-code">&lt;/&gt; Show the code</button>
+            <span class="small muted">The statistical tests and plots, as runnable Python.</span></div>
+          <details class="expert"><summary>Details for the experts</summary><div id="r-expert"></div></details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-explore" role="tabpanel" aria-labelledby="tab-explore" hidden>
+    <div class="headline">
+      <h1>Ask a question. The AI scientist finds answers; the referees check every one.</h1>
+      <p>Type any question about breast cancer survival. The scientist runs dozens of analyses and writes findings.
+        Each finding is then checked independently and gets a card.</p>
+    </div>
+    <div class="xgrid"><div class="xmain">
+    <form class="card" id="x-form">
+      <label class="label" for="x-q">Your research question</label>
+      <textarea class="q" id="x-q" placeholder="e.g. Which factors explain why some breast cancer patients live longer than others?"></textarea>
+      <div class="examples" id="x-examples"></div>
+      <div class="form-grid">
+        <div class="opt"><label class="label" for="x-ds">Data</label>
+          <select id="x-ds"><option value="metabric">METABRIC · 2,509 patients, ~10 years follow-up</option>
+            <option value="tcga">TCGA · 1,084 patients, race and ancestry recorded</option>
+            <option value="upload">My own spreadsheet (CSV)</option></select></div>
+        <div class="opt"><label class="label" for="x-mode">Scientist</label>
+          <select id="x-mode"><option value="kiro">Kiro AI scientist (uses your Kiro credits)</option>
+            <option value="simple">Simple analyst (free, no AI)</option>
+            <option value="ai">Claude API scientist (needs Anthropic API credits)</option></select></div>
+      </div>
+      <div class="opt" id="x-upload" hidden><label class="label" for="x-file">Spreadsheet</label>
+        <input type="file" id="x-file" accept=".csv,text/csv">
+        <span class="small muted">One row per patient. Needs <span class="mono">os_months</span> (months followed) and
+          <span class="mono">os_event</span> (1 = died, 0 = alive). <a href="/sample.csv">Download a sample</a>.</span></div>
+      <div class="row"><button class="primary" id="x-run" type="submit">Start the investigation</button><span class="error" id="x-err" role="alert"></span></div>
+    </form>
+
+    <div class="steps" id="x-steps" hidden>
+      <div class="step" data-s="data"><b>Data checked</b><span class="count" id="c-data">–</span><span>patients</span></div>
+      <div class="step" data-s="question"><b>Question framed</b><span class="count" id="c-question">–</span><span>wordings</span></div>
+      <div class="step" data-s="explore"><b>Analyses run</b><span class="count" id="c-explore">0</span><span>tests</span></div>
+      <div class="step" data-s="referee"><b>Findings checked</b><span class="count" id="c-referee">0</span><span>by the referees</span></div>
+      <div class="step" data-s="verdict"><b>Cards given</b><span class="count" id="c-verdict">0</span><span>verdicts</span></div>
+    </div>
+    <div class="livelog" id="x-log" hidden aria-live="polite"></div>
+
+    <div class="card" id="x-results" hidden>
+      <div class="catch" id="x-catch" hidden></div>
+      <div class="summary" id="x-summary"></div>
+      <div class="charts2">
+        <div class="tile"><h3>Cards given</h3><div id="x-donut"></div></div>
+        <div class="tile"><h3>Every data finding: change in risk, colored by its card</h3><div id="x-forest"></div>
+          <p class="note">Each dot is one finding. Left of the line means lower risk, right means higher. The bar is the range the data allow.</p></div>
+      </div>
+      <div class="tbl"><table><thead><tr><th style="width:120px">Card</th><th>Finding</th><th style="width:38%">Why</th></tr></thead><tbody id="x-rows"></tbody></table></div>
+      <p class="small muted">Click a finding to see each referee's check. <a id="x-report" target="_blank" rel="noopener">Open the full report</a></p>
+    </div>
+    </div>
+
+    <aside class="lit" id="lit" aria-labelledby="lit-h">
+      <div class="lit-head">
+        <span class="label">Literature agent</span>
+        <h3 id="lit-h">What published papers say</h3>
+        <p class="small muted">Reads the TCGA Pan-Cancer Atlas papers first, then searches 40 million abstracts on Europe PMC.
+          Every passage is ranked against your question. The scientist can cite these papers, and the Citation checker reads each one it cites.</p>
+      </div>
+      <div class="seg lit-tabs" role="tablist" aria-label="Literature tools">
+        <button type="button" role="tab" data-lt="papers" aria-selected="true">Papers</button>
+        <button type="button" role="tab" data-lt="ask" aria-selected="false">Ask</button>
+        <button type="button" role="tab" data-lt="pdf" aria-selected="false">Read a PDF</button>
+      </div>
+      <div class="lit-pane" data-pane="papers">
+        <div class="lit-status small muted" id="lit-status" aria-live="polite">Loading papers…</div>
+        <div id="lit-list"></div>
+      </div>
+      <div class="lit-pane" data-pane="ask" hidden>
+        <label class="label" for="lit-q">Question for the papers</label>
+        <textarea class="q lit-q" id="lit-q"></textarea>
+        <div class="row"><button type="button" class="primary small-btn" id="lit-ask">Ask</button><span class="small muted" id="lit-ask-note"></span></div>
+        <div id="lit-answer"></div>
+      </div>
+      <div class="lit-pane" data-pane="pdf" hidden>
+        <p class="small muted">Drop in any paper as a PDF. Quorum splits it into paragraphs and pulls out the ones that answer your question.</p>
+        <label class="drop" for="lit-pdf"><b>Choose a PDF</b><span class="small muted">or drag it here</span>
+          <input type="file" id="lit-pdf" accept="application/pdf,.pdf"></label>
+        <div id="lit-pdf-out"></div>
+      </div>
+      <div class="lit-sources small" id="lit-sources"></div>
+    </aside>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-data" role="tabpanel" aria-labelledby="tab-data" hidden>
+    <div class="headline">
+      <h1>The patients behind every check</h1>
+      <p>Quorum checks findings against real, public breast cancer studies. Here is who is in them, before any analysis.</p>
+    </div>
+    <div class="row">
+      <div class="seg" role="group" aria-label="Dataset">
+        <button type="button" id="d-metabric" aria-pressed="true">METABRIC</button>
+        <button type="button" id="d-tcga" aria-pressed="false">TCGA</button>
+      </div>
+      <span class="small muted" id="d-desc"></span>
+    </div>
+    <div class="stat-row" id="d-stats"></div>
+    <div class="dash" id="d-dash"></div>
+  </section>
+
+  <section class="screen" id="screen-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+    <div class="headline"><h1>History</h1><p>Every check and investigation from this session, saved with its evidence.</p></div>
+    <div class="history" id="h-list"></div>
+  </section>
+</main>
+
+<dialog class="code" id="codeDlg" aria-labelledby="codeTitle">
+  <div class="inner">
+    <header><div><span class="label">The code behind this verdict</span><h2 id="codeTitle"></h2></div>
+      <button type="button" class="close" id="codeClose">Close</button></header>
+    <div class="code-tabs" role="tablist" id="codeTabs"></div>
+    <p class="code-what" id="codeWhat"></p>
+    <pre class="codebox" id="codeBox" tabindex="0"></pre>
+    <footer><span>Run it inside the quorum folder with <span class="mono">.venv/bin/python</span>. It prints the same numbers shown on the card.</span>
+      <button type="button" class="codebtn" id="codeCopy">Copy code</button></footer>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const CARD = { robust: "go", verified: "go", contested: "warn", unverifiable: "stop", refuted: "stop" };
+const CALL = { go: "Act on it", warn: "Check first", stop: "Set aside" };
+const ICON = { supports: "✓", contests: "!", refutes: "✕", no_evidence: "–" };
+let dataset = "metabric", OPTS = null, hasKey = false, hasKiro = false;
+
+const TABS = ["check", "explore", "data", "history"];
+function show(name) {
+  TABS.forEach((t) => { $("tab-" + t).setAttribute("aria-selected", t === name); $("screen-" + t).hidden = t !== name; });
+  if (name === "history") loadHistory();
+  if (name === "data" && !DATA_LOADED) loadData("metabric");
+  if (name === "explore") loadLit($("x-q").value);
+}
+TABS.forEach((t) => $("tab-" + t).addEventListener("click", () => show(t)));
+
+fetch("/api/status").then((r) => r.json()).then((s) => {
+  hasKey = s.has_key; hasKiro = s.kiro;
+  $("status").textContent = s.kiro ? "Kiro connected · AI ready" : (s.has_key ? "Claude key found (needs API credits)" : "Free mode · no AI");
+  if (!s.kiro) $("x-mode").value = "simple";
+}).catch(() => { $("status").textContent = "Server offline"; });
+
+function plainWhy(reasons, label) {
+  const all = (reasons || []).join(" ");
+  const out = []; let m;
+  if (/reverses when counting only breast cancer deaths/.test(all)) out.push("Count only deaths from breast cancer and the effect flips. Patients dying of other causes (often simply older patients) made it look this way.");
+  else if (/reverses when compared fairly/.test(all)) out.push("Compare similar patients and the effect flips. A hidden factor, most likely age, made it look this way.");
+  else if (/disappears when compared fairly/.test(all)) out.push("Compare similar patients (same age, grade, tumor size, nodes) and the effect vanishes. A hidden factor probably explains it.");
+  else if (/disappears when counting only breast cancer deaths/.test(all)) out.push("Count only deaths from breast cancer and the effect vanishes. It was driven by deaths from other causes.");
+  if ((m = all.match(/after testing (\d+) hypotheses/))) out.push(`${m[1]} things were tested; this one only looks special by luck.`);
+  if (/Underpowered/.test(all)) out.push("Too few deaths in this group to be sure.");
+  if (/trastuzumab/.test(all)) out.push("These patients were treated before today's HER2 drugs, so this may not apply now.");
+  if (/Causal language/.test(all)) out.push("The data can show a link, not a cause.");
+  if (/Strong wording/.test(all)) out.push("The wording is much stronger than the effect.");
+  if (/Direction is wrong/.test(all)) out.push("The raw data say the opposite.");
+  else if (/outside the re-analysed range/.test(all)) out.push("The size of the effect is overstated.");
+  if (/no clear association|re-analysis is not/.test(all) && !/Direction is wrong/.test(all)) out.push("Recomputed from the raw data, there is no real effect.");
+  if (/Opposite direction in TCGA/.test(all)) out.push("A separate group of patients shows the opposite.");
+  if (!out.length && /Reproduced from raw data/.test(all)) {
+    out.push("Recomputed from the raw data, and it holds up when similar patients are compared.");
+    if (/Replicated/.test(all)) out.push("It also shows up in a separate group of patients.");
+  }
+  if (!out.length) out.push(label === "unverifiable" ? "No referee could check this one." : "See the details.");
+  return out.join(" ");
+}
+function plainCheck(c) {
+  const d = c.detail || "";
+  switch (c.referee) {
+    case "reanalyst":
+      if (c.outcome === "supports") return "Recomputed from the raw data: the effect is real and points this way.";
+      if (/Direction is wrong/.test(d)) return "Recomputed from the raw data: it points the opposite way.";
+      if (/no clear association|re-analysis is not/.test(d)) return "Recomputed from the raw data: there's no real effect.";
+      if (/outside/.test(d)) return "Recomputed: the effect is real but a different size than stated.";
+      return "Couldn't recompute it from this data.";
+    case "rules": return plainWhy([d]);
+    case "adjuster":
+      if (c.outcome === "supports") return "Still true when similar patients are compared, and when only cancer deaths are counted.";
+      if (c.outcome === "contests") return plainWhy([d]);
+      return "No fair-comparison check was possible.";
+    case "replicator":
+      if (c.outcome === "supports") return "Also true in a separate study of 1,084 patients (TCGA).";
+      if (c.outcome === "contests") return "A separate study (TCGA) shows the opposite.";
+      if (/not recorded|doesn't record|no claudin/.test(d)) return "Can't be tested in the second study: it didn't record this.";
+      if (/too few deaths/.test(d)) return "The second study leans the same way but has too few deaths to confirm.";
+      return "Not tested in a second study.";
+    case "librarian":
+      if (c.outcome === "supports") return "Read the cited papers: they back this sentence.";
+      if (c.outcome === "contests") return "Read the cited papers: at least one is off-topic or too weak to back this.";
+      if (c.outcome === "refutes") return /not found/.test(d) ? "Cited a paper that doesn't exist." : "A cited paper says the opposite.";
+      return "No papers were cited, or they couldn't be fetched.";
+    default: return d;
+  }
+}
+
+const EXAMPLES = [
+  { name: "The estrogen trap", ds: "metabric", sub: "er_pos", factor: "esr1_z", dir: "worse", phr: "linked" },
+  { name: "A flipped claim", ds: "metabric", sub: "all", factor: "grade", exp: "3", ref: "1", dir: "better", phr: "linked" },
+  { name: "Too few patients", ds: "metabric", sub: "under40", factor: "pam50", exp: "Basal", ref: "LumA", dir: "worse", phr: "linked" },
+  { name: "Cause vs link", ds: "metabric", sub: "all", factor: "pam50", exp: "Basal", ref: "LumA", dir: "worse", phr: "causes" },
+  { name: "A solid finding", ds: "metabric", sub: "all", factor: "nodes_positive", dir: "worse", phr: "linked" },
+];
+$("examples").innerHTML = EXAMPLES.map((e, i) => `<button type="button" class="ex" data-i="${i}">${esc(e.name)}</button>`).join("");
+$("examples").addEventListener("click", async (ev) => {
+  const b = ev.target.closest(".ex"); if (!b) return;
+  const e = EXAMPLES[+b.dataset.i];
+  if (e.ds !== dataset) await setDataset(e.ds);
+  $("b-sub").value = e.sub; $("b-factor").value = e.factor; fillLevels();
+  if (e.exp) { $("b-exp").value = e.exp; $("b-ref").value = e.ref; }
+  $("b-dir").value = e.dir; $("b-phr").value = e.phr; preview(); runCheck();
+});
+
+async function setDataset(ds) {
+  dataset = ds;
+  $("ds-metabric").setAttribute("aria-pressed", ds === "metabric");
+  $("ds-tcga").setAttribute("aria-pressed", ds === "tcga");
+  $("ds-note").textContent = ds === "tcga" ? "1,084 patients" : "2,509 patients";
+  OPTS = await (await fetch(`/api/options?dataset=${ds}`)).json();
+  $("b-sub").innerHTML = OPTS.subgroups.map((s) => `<option value="${s.id}">${esc(s.label)}</option>`).join("");
+  $("b-factor").innerHTML = OPTS.factors.map((f) => `<option value="${f.id}">${esc(f.kind === "number" ? "higher " + f.label : f.label)}</option>`).join("");
+  fillLevels(); preview();
+}
+function factor() { return OPTS.factors.find((f) => f.id === $("b-factor").value); }
+function fillLevels() {
+  const f = factor();
+  const cat = f && f.kind === "category";
+  $("b-levels").hidden = !cat;
+  if (cat) {
+    const opts = f.levels.map((l) => `<option value="${esc(l.id)}">${esc(l.label)}</option>`).join("");
+    $("b-exp").innerHTML = opts; $("b-ref").innerHTML = opts;
+    if (f.levels.length > 1) { $("b-ref").value = f.levels[0].id; $("b-exp").value = f.levels[1].id; }
+  }
+}
+function preview() {
+  if (!OPTS) return;
+  const f = factor(), sub = $("b-sub").selectedOptions[0]?.text || "all patients";
+  const what = f.kind === "number" ? `higher ${f.label}`
+    : `${f.label} ${$("b-exp").selectedOptions[0]?.text} (compared with ${$("b-ref").selectedOptions[0]?.text})`;
+  const who = sub === "all patients" ? "" : `Among ${sub}, `;
+  const s = `${who}${what} ${$("b-phr").selectedOptions[0].text} ${$("b-dir").value} survival.`;
+  $("b-preview").textContent = s.charAt(0).toUpperCase() + s.slice(1);
+}
+["b-sub", "b-exp", "b-ref", "b-phr", "b-dir"].forEach((id) => $(id).addEventListener("change", preview));
+$("b-factor").addEventListener("change", () => { fillLevels(); preview(); });
+$("ds-metabric").addEventListener("click", () => setDataset("metabric"));
+$("ds-tcga").addEventListener("click", () => setDataset("tcga"));
+$("b-check").addEventListener("click", runCheck);
+
+const RECENT = [];
+async function runCheck() {
+  $("b-err").textContent = "";
+  const f = factor();
+  const params = { dataset, subgroup: $("b-sub").value, factor: f.id, direction: $("b-dir").value, phrasing: $("b-phr").value };
+  if (f.kind === "category") { params.exposed = $("b-exp").value; params.reference = $("b-ref").value; }
+  $("b-check").disabled = true; $("b-check").textContent = "Checking…";
+  try {
+    const r = await fetch("/api/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(params) });
+    const res = await r.json();
+    if (!r.ok) throw new Error(res.error || "The check failed.");
+    showResult(res);
+    RECENT.unshift({ res, params }); RECENT.splice(6);
+    $("recentWrap").hidden = false;
+    $("recent").innerHTML = RECENT.map((x, i) => `<button type="button" data-i="${i}"><span class="pill ${CARD[x.res.label]}">${CALL[CARD[x.res.label]]}</span><span>${esc(x.res.text)}</span></button>`).join("");
+  } catch (e) { $("b-err").textContent = e.message; }
+  $("b-check").disabled = false; $("b-check").textContent = "Check this finding";
+}
+$("recent").addEventListener("click", (ev) => { const b = ev.target.closest("button"); if (b) showResult(RECENT[+b.dataset.i].res); });
+
+// Risk multipliers on a log scale, 0.25x to 4x, so "no difference" sits in the middle.
+const pos = (hr) => Math.max(0, Math.min(100, 50 + (Math.log(hr) / Math.log(4)) * 50));
+function chartRow(label, hr, ci) {
+  if (hr == null) return "";
+  const lo = pos(ci ? ci[0] : hr), hi = pos(ci ? ci[1] : hr);
+  const clear = ci && (ci[0] > 1 || ci[1] < 1);
+  const cls = clear ? (hr > 1 ? "worse" : "better") : "";
+  const words = clear ? (hr > 1 ? `${hr.toFixed(2)}× higher risk` : `${(1 / hr).toFixed(2)}× lower risk`) : "no clear difference";
+  return `<div class="crow fresh"><span>${esc(label)}</span><div class="scale ${cls}"><div class="base"></div><div class="one"></div>
+    <div class="ci" style="left:${lo}%;width:${Math.max(1, hi - lo)}%"></div><div class="pt" style="left:${pos(hr)}%"></div></div>
+    <span class="mono small" style="white-space:nowrap">${words}</span></div>`;
+}
+function showResult(res) {
+  const k = CARD[res.label] || "stop";
+  $("r-empty").hidden = true; $("r-body").hidden = false;
+  $("r-verdict").className = `verdict fresh ${k}`;
+  $("r-call").textContent = CALL[k];
+  $("r-why").textContent = plainWhy(res.reasons, res.label);
+  $("r-text").textContent = res.text;
+  $("r-checks").innerHTML = res.checks.map((c) => `<li class="fresh"><span class="ico ${c.outcome}" aria-hidden="true">${ICON[c.outcome] || "–"}</span>
+    <div><b>${esc(c.name)}</b> <span class="job">· ${esc(c.job)}</span><div class="what">${esc(plainCheck(c))}</div></div></li>`).join("");
+  const rows = [];
+  const re = res.checks.find((c) => c.referee === "reanalyst");
+  if (re && re.data && re.data.hr != null) rows.push(chartRow("As claimed (all deaths)", re.data.hr, re.data.ci));
+  const adj = res.checks.find((c) => c.referee === "adjuster");
+  if (adj && adj.data) Object.entries(adj.data).forEach(([key, v]) => {
+    if (key === "original" || !v || v.hr == null) return;
+    rows.push(chartRow(/breast cancer/.test(key) ? "Cancer deaths only, similar patients" : "Similar patients compared", v.hr, v.ci));
+  });
+  const rep = res.checks.find((c) => c.referee === "replicator");
+  if (rep && rep.data && rep.data.hr != null) rows.push(chartRow("A different study (TCGA)", rep.data.hr, rep.data.ci));
+  $("r-chart").innerHTML = rows.join("");
+  $("r-chartwrap").hidden = !rows.length;
+  $("r-expert").innerHTML = res.checks.map((c) => `<p><b>${esc(c.name)}:</b> ${esc(c.detail)}</p>`).join("");
+  if (window.matchMedia("(max-width: 960px)").matches) $("result").scrollIntoView({ behavior: "smooth" });
+}
+
+const QUESTIONS = [
+  "Which clinical and molecular features best explain differences in survival in breast cancer, and in which patient subgroups?",
+  "Does the amount of estrogen receptor on a tumor matter for survival, beyond positive or negative?",
+  "Do younger patients have different survival patterns, and why?",
+];
+$("x-examples").innerHTML = QUESTIONS.map((q, i) => `<button type="button" class="ex" data-i="${i}">${esc(q.length > 70 ? q.slice(0, 68) + "…" : q)}</button>`).join("");
+$("x-examples").addEventListener("click", (ev) => { const b = ev.target.closest(".ex"); if (b) { $("x-q").value = QUESTIONS[+b.dataset.i]; $("x-q").focus(); } });
+$("x-ds").addEventListener("change", () => { $("x-upload").hidden = $("x-ds").value !== "upload"; });
+let csvText = null;
+$("x-file").addEventListener("change", async () => { const f = $("x-file").files[0]; csvText = f ? await f.text() : null; });
+
+let X = null, es = null;
+function step(name, cls) { const el = document.querySelector(`#x-steps [data-s="${name}"]`); if (el) { el.classList.remove("active", "done"); el.classList.add(cls); } }
+function log(t) { $("x-log").insertAdjacentHTML("beforeend", `<div>${esc(t)}</div>`); $("x-log").scrollTop = 1e9; }
+
+$("x-form").addEventListener("submit", async (e) => {
+  e.preventDefault(); $("x-err").textContent = "";
+  const q = $("x-q").value.trim();
+  if (!q) { $("x-err").textContent = "Type a question, or pick one of the suggestions."; return; }
+  const ds = $("x-ds").value, mode = $("x-mode").value;
+  if (ds === "upload" && !csvText) { $("x-err").textContent = "Choose a spreadsheet first."; return; }
+  if (mode === "ai" && !hasKey) { $("x-err").textContent = "Claude mode needs an API key. Use Kiro or the simple analyst."; return; }
+  if (mode === "kiro" && !hasKiro) { $("x-err").textContent = "Kiro isn't signed in. Run kiro-cli login, then reload."; return; }
+  X = { claims: {}, analyses: 0, judged: 0, cards: 0, filter: null };
+  LIT.cited = new Set(); loadLit(q);
+  ["c-explore", "c-referee", "c-verdict"].forEach((id) => { $(id).textContent = "0"; });
+  $("c-data").textContent = "–"; $("c-question").textContent = "–";
+  document.querySelectorAll("#x-steps .step").forEach((s) => s.classList.remove("active", "done"));
+  $("x-steps").hidden = false; $("x-log").hidden = false; $("x-log").innerHTML = ""; $("x-results").hidden = true;
+  $("x-run").disabled = true; $("x-run").textContent = "Investigating…";
+  try {
+    const r = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q, dataset: ds, mode, budget: 2, csv: csvText }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || "Could not start.");
+    es = new EventSource(`/api/runs/${body.run_id}/events`);
+    es.onmessage = (m) => handle(JSON.parse(m.data));
+    es.onerror = () => { es.close(); xdone(); };
+  } catch (err) { $("x-err").textContent = err.message; xdone(); }
+});
+function xdone() { $("x-run").disabled = false; $("x-run").textContent = "Start the investigation"; }
+
+function handle(ev) {
+  switch (ev.stage) {
+    case "data":
+      step("data", ev.status === "done" ? "done" : "active");
+      if (ev.status === "done") { $("c-data").textContent = ev.card.patients.toLocaleString(); log(`Data checked: ${ev.card.patients} patients, ${ev.card.deaths} deaths.`); }
+      break;
+    case "question": step("question", "done"); $("c-question").textContent = ev.wordings.length; step("explore", "active");
+      log(ev.mode === "simple" ? "The simple analyst starts exploring." : `The question was reworded ${ev.wordings.length} ways; each wording is explored independently, at the same time.`); break;
+    case "literature":
+      if (ev.status === "start") log("The literature agent is finding and reading papers…");
+      else log(`Literature agent: ${ev.papers} papers ranked (${ev.full_text} read in full). The best ${Math.min(8, ev.passages)} passages go to the scientist.`);
+      break;
+    case "explore": if (ev.status === "start") log(`${ev.who} is exploring.`); break;
+    case "analysis":
+      X.analyses += 1; $("c-explore").textContent = X.analyses;
+      if (ev.result && !ev.result.error) log(`Test ${ev.n}: ${ev.what} → ${ev.result.hr}× risk`);
+      break;
+    case "claims":
+      ev.claims.forEach((c) => { X.claims[c.id] = { text: c.text, run: ev.run, citations: c.citations || [] }; (c.citations || []).forEach((id) => LIT.cited.add(id)); });
+      renderLit();
+      log(`Wrote ${ev.claims.length} findings. Sending each one to the referees.`); step("explore", "done"); step("referee", "active"); break;
+    case "verdict": X.judged += 1; $("c-referee").textContent = X.judged; break;
+    case "final_verdict":
+      if (X.claims[ev.claim_id]) Object.assign(X.claims[ev.claim_id], { label: ev.label, reasons: ev.reasons, code: ev.code || [] });
+      X.cards += 1; $("c-verdict").textContent = X.cards; step("referee", "done"); step("verdict", "active"); break;
+    case "referee": if (X.claims[ev.claim_id]) (X.claims[ev.claim_id].checks ||= []).push(ev); break;
+    case "notice": log(ev.message); break;
+    case "done": step("verdict", "done"); results(ev); xdone(); if (es) es.close(); break;
+    case "error": $("x-err").textContent = ev.message; xdone(); break;
+  }
+}
+function results(ev) {
+  const all = Object.values(X.claims).filter((c) => c.label);
+  const by = { go: [], warn: [], stop: [] };
+  all.forEach((c) => by[CARD[c.label]].push(c));
+  $("x-results").hidden = false;
+  $("x-summary").innerHTML = ["go", "warn", "stop"].map((k) => `<button type="button" class="sum ${k}" data-k="${k}" aria-pressed="false"><b>${by[k].length}</b><span>${CALL[k]}</span></button>`).join("");
+  const pick = all.find((c) => /reverses/.test(c.reasons.join(" "))) || all.find((c) => CARD[c.label] === "warn") || all.find((c) => CARD[c.label] === "stop");
+  if (pick) { $("x-catch").hidden = false; $("x-catch").innerHTML = `<span class="label">Biggest catch</span><span class="big">“${esc(pick.text)}”</span><p>${esc(plainWhy(pick.reasons, pick.label))}</p>`; }
+  else $("x-catch").hidden = true;
+  $("x-report").href = ev.report;
+  renderRows();
+}
+function renderRows() {
+  const order = { warn: 0, stop: 1, go: 2 };
+  const rows = Object.entries(X.claims).filter(([, c]) => c.label && (!X.filter || CARD[c.label] === X.filter))
+    .sort((a, b) => order[CARD[a[1].label]] - order[CARD[b[1].label]]);
+  $("x-rows").innerHTML = rows.map(([id, c]) => { const k = CARD[c.label];
+    return `<tr class="claim-row" data-id="${id}" tabindex="0"><td><span class="pill ${k}">${CALL[k]}</span></td><td>${esc(c.text)}${(c.citations || []).length ? `<div class="cites">${c.citations.map((id) => `<button type="button" data-jump="${esc(id)}" title="Show this paper">PMID ${esc(id)}</button>`).join("")}</div>` : ""}</td><td>${esc(plainWhy(c.reasons, c.label))}</td></tr>`; }).join("");
+}
+$("x-summary").addEventListener("click", (ev) => {
+  const b = ev.target.closest(".sum"); if (!b) return;
+  X.filter = X.filter === b.dataset.k ? null : b.dataset.k;
+  document.querySelectorAll("#x-summary .sum").forEach((s) => s.setAttribute("aria-pressed", s.dataset.k === X.filter));
+  renderRows();
+});
+function toggleRow(tr) {
+  const next = tr.nextElementSibling;
+  if (next && next.classList.contains("detail")) { next.remove(); return; }
+  const c = X.claims[tr.dataset.id];
+  tr.insertAdjacentHTML("afterend", `<tr class="detail"><td></td><td colspan="2"><ul class="checks">${(c.checks || []).map((e) =>
+    `<li><span class="ico ${e.outcome}" aria-hidden="true">${ICON[e.outcome] || "–"}</span><div><b>${esc(e.name)}</b><div class="what">${esc(plainCheck(e))}</div></div></li>`).join("")}</ul>
+    <button type="button" class="codebtn" data-code="${tr.dataset.id}" style="margin-top:8px">&lt;/&gt; Show the code</button></td></tr>`);
+}
+$("x-rows").addEventListener("click", (ev) => {
+  const j = ev.target.closest("[data-jump]"); if (j) { jumpTo(j.dataset.jump); return; }
+  const b = ev.target.closest("button[data-code]");
+  if (b) { const c = X.claims[b.dataset.code]; openCode(c.code, c.text); return; }
+  const tr = ev.target.closest("tr.claim-row"); if (tr) toggleRow(tr);
+});
+$("x-rows").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { const tr = ev.target.closest("tr.claim-row"); if (tr) toggleRow(tr); } });
+
+/* ---------- literature agent (right-hand panel) ---------- */
+const LIT = { q: null, data: null, cited: new Set(), open: new Set() };
+function hl(text, terms) {
+  let h = esc(text);
+  if (terms && terms.length) h = h.replace(new RegExp(`\\b(${terms.join("|")})\\b`, "gi"), "<mark>$1</mark>");
+  return h;
+}
+async function loadLit(q) {
+  q = (q || "").trim() || QUESTIONS[0];
+  if (LIT.q === q && LIT.data) return;
+  LIT.q = q; $("lit-q").value = q;
+  $("lit-status").textContent = "Finding and reading papers for your question…";
+  try {
+    const r = await fetch(`/api/papers?q=${encodeURIComponent(q)}`);
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || "Could not load papers.");
+    if (LIT.q !== q) return;
+    LIT.data = body; renderLit();
+  } catch (err) { $("lit-status").textContent = err.message; }
+}
+function paperHTML(p) {
+  const cited = LIT.cited.has(p.pmid), open = LIT.open.has(p.pmid);
+  const meta = [p.authors, p.journal, p.year].filter(Boolean).map(esc).join(" · ");
+  return `<div class="paper${cited ? " cited" : ""}" id="paper-${esc(p.pmid)}">
+    <div class="rel" title="How closely this paper's best passage matches your question"><i><b style="width:${p.relevance}%"></b></i><span>${p.relevance}%</span></div>
+    <button type="button" class="t" data-open="${esc(p.pmid)}" aria-expanded="${open}">${esc(p.title)}</button>
+    <div class="meta">${meta}<span class="mono">PMID ${esc(p.pmid)}</span>
+      <span class="tag${p.full_text ? " on" : ""}">${p.full_text ? `full text read · ${p.paragraphs} ¶` : "abstract only"}</span>
+      ${cited ? `<span class="tag on">cited by the scientist</span>` : ""}</div>
+    ${open ? `${p.best_passage ? `<div class="passage"><span class="src">Best match · ${esc(p.best_passage.section)}</span>${hl(p.best_passage.text, p.matched)}</div>` : `<p class="small muted">No passage mentions your question's words.</p>`}
+      <div class="links">${p.links.pubmed ? `<a href="${esc(p.links.pubmed)}" target="_blank" rel="noopener">PubMed</a>` : ""}
+        ${p.links.pmc ? `<a href="${esc(p.links.pmc)}" target="_blank" rel="noopener">Full text</a>` : ""}
+        ${p.links.pdf ? `<a href="${esc(p.links.pdf)}" target="_blank" rel="noopener">PDF</a>` : ""}
+        <button type="button" class="linkbtn" data-read="${esc(p.pmid)}">Read it for my question →</button></div>
+      <div class="reader" id="reader-${esc(p.pmid)}" hidden></div>` : ""}
+  </div>`;
+}
+function renderLit() {
+  const d = LIT.data; if (!d) return;
+  const full = d.papers.filter((p) => p.full_text).length;
+  $("lit-status").innerHTML = `${d.papers.length} papers · ${full} read in full · ${d.passages.length} strong passages<br>Ranked for: <i>${esc(d.question)}</i>`;
+  const shelves = [["Pan-Cancer Atlas", "TCGA Pan-Cancer Atlas"], ["Found by search", "Found by search on Europe PMC"]];
+  $("lit-list").innerHTML = shelves.map(([key, label]) => {
+    const ps = d.papers.filter((p) => p.shelf === key);
+    return ps.length ? `<div class="shelf"><span>${label}</span><span>${ps.length}</span></div>${ps.map(paperHTML).join("")}` : "";
+  }).join("");
+  $("lit-sources").innerHTML = `<span class="label">Sources</span>${d.sources.map((s) => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.label)}</a>`).join("")}`;
+}
+$("lit-list").addEventListener("click", async (ev) => {
+  const t = ev.target.closest("[data-open]");
+  if (t) { const id = t.dataset.open; LIT.open.has(id) ? LIT.open.delete(id) : LIT.open.add(id); renderLit(); return; }
+  const r = ev.target.closest("[data-read]"); if (!r) return;
+  const box = $("reader-" + r.dataset.read); box.hidden = false; box.innerHTML = `<p class="small muted">Reading the paper…</p>`;
+  try {
+    const res = await fetch(`/api/papers/${r.dataset.read}?q=${encodeURIComponent(LIT.q)}`);
+    const body = await res.json();
+    if (!res.ok || body.error) throw new Error(body.error || "Could not read it.");
+    box.innerHTML = `<span class="small muted">${body.full_text ? `Read ${body.sections.reduce((a, s) => a + s.paragraphs, 0)} paragraphs across ${body.sections.length} sections. Most relevant to your question:` : "Only the abstract is open. Most relevant parts:"}</span>
+      ${body.passages.map((x) => `<div class="passage"><span class="src">${esc(x.section)} · score ${x.score}</span>${hl(x.text, x.matched)}</div>`).join("") || `<p class="small muted">Nothing in it matches your question's words.</p>`}`;
+  } catch (err) { box.innerHTML = `<p class="error">${esc(err.message)}</p>`; }
+});
+document.querySelector(".lit-tabs").addEventListener("click", (ev) => {
+  const b = ev.target.closest("[data-lt]"); if (!b) return;
+  document.querySelectorAll(".lit-tabs button").forEach((x) => x.setAttribute("aria-selected", x === b));
+  document.querySelectorAll(".lit-pane").forEach((p) => { p.hidden = p.dataset.pane !== b.dataset.lt; });
+});
+function citeLinks(text) {
+  return esc(text).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[?PMID\s*(\d+)\]?/g, (_, id) => `<a href="#paper-${id}" data-jump="${id}">[${id}]</a>`);
+}
+function jumpTo(id) {
+  document.querySelector('.lit-tabs [data-lt="papers"]').click();
+  LIT.open.add(id); renderLit();
+  const el = $("paper-" + id); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+$("lit-answer").addEventListener("click", (ev) => { const a = ev.target.closest("[data-jump]"); if (a) { ev.preventDefault(); jumpTo(a.dataset.jump); } });
+$("lit-ask").addEventListener("click", async () => {
+  const q = $("lit-q").value.trim(); if (!q) return;
+  $("lit-ask").disabled = true; $("lit-ask-note").textContent = hasKiro ? "Kiro is reading the passages…" : "Finding passages…";
+  $("lit-answer").innerHTML = "";
+  try {
+    const r = await fetch("/api/papers/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || "Could not answer.");
+    $("lit-answer").innerHTML = `<div class="answer"><span class="label">Answer · ${esc(body.by)}</span><p>${citeLinks(body.text)}</p>
+      ${body.made_up && body.made_up.length ? `<p class="error">Cited a paper that wasn't in the passages: ${body.made_up.map(esc).join(", ")}</p>` : ""}</div>`;
+    LIT.q = null; loadLit(q);
+  } catch (err) { $("lit-answer").innerHTML = `<p class="error">${esc(err.message)}</p>`; }
+  $("lit-ask").disabled = false; $("lit-ask-note").textContent = "";
+});
+async function readPDF(file) {
+  if (!file) return;
+  $("lit-pdf-out").innerHTML = `<p class="small muted">Reading ${esc(file.name)}…</p>`;
+  const buf = new Uint8Array(await file.arrayBuffer());
+  let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+  try {
+    const r = await fetch("/api/pdf", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: file.name, data: btoa(bin), question: LIT.q || $("x-q").value || QUESTIONS[0] }) });
+    const body = await r.json();
+    if (!r.ok) throw new Error(body.error || "Could not read it.");
+    $("lit-pdf-out").innerHTML = `<p class="small muted">${body.paragraphs} paragraphs on ${body.pages} pages. Most relevant to your question:</p>
+      ${body.passages.map((x) => `<div class="passage"><span class="src">${esc(x.section)} · score ${x.score}</span>${esc(x.text)}</div>`).join("") || `<p class="small muted">Nothing in it matches your question's words.</p>`}`;
+  } catch (err) { $("lit-pdf-out").innerHTML = `<p class="error">${esc(err.message)}</p>`; }
+}
+$("lit-pdf").addEventListener("change", () => readPDF($("lit-pdf").files[0]));
+const drop = document.querySelector(".drop");
+["dragover", "dragenter"].forEach((n) => drop.addEventListener(n, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach((n) => drop.addEventListener(n, () => drop.classList.remove("over")));
+drop.addEventListener("drop", (e) => { e.preventDefault(); readPDF(e.dataTransfer.files[0]); });
+
+async function loadHistory() {
+  const h = await (await fetch("/api/history")).json();
+  const runs = h.runs.map((r) => `<div class="hitem"><div><b>${esc(r.question || "Investigation")}</b>
+    <div class="small muted">${r.claims} findings · ${({ ai: "Claude", kiro: "Kiro" })[r.mode] || "simple analyst"} ·
+    ${Object.entries(r.labels).map(([l, n]) => `${n} ${l}`).join(", ")}</div></div><a href="${esc(r.report)}" target="_blank" rel="noopener">Open report</a></div>`).join("");
+  const checks = h.checks.map((c) => `<div class="hitem"><div><span class="pill ${CARD[c.label]}">${CALL[CARD[c.label]]}</span> ${esc(c.text)}</div><span></span></div>`).join("");
+  $("h-list").innerHTML = (checks || runs) ? `${checks}${runs}` : `<p class="muted">Nothing yet. Check a finding or start an investigation.</p>`;
+}
+
+/* ---------- charts (hand-drawn SVG) ---------- */
+const PAL = ["--c1", "--c2", "--c3", "--c4", "--c5", "--c6", "--c7", "--c8"].map((v) => `var(${v})`);
+function legend(items) {
+  return `<div class="legend">${items.map((it, i) => `<span><i style="background:${it.color || PAL[i % 8]}"></i>${esc(it.label)}${it.n != null ? ` (${it.n.toLocaleString()})` : ""}</span>`).join("")}</div>`;
+}
+function kmSVG(series, opts = {}) {
+  const W = 360, H = 240, L = 44, R = 10, T = 10, B = 40;
+  const maxT = opts.maxT || Math.max(1, ...series.map((s) => s.max_t || (s.t.length ? s.t[s.t.length - 1] : 1)));
+  const x = (t) => L + (t / maxT) * (W - L - R), y = (v) => T + (1 - v) * (H - T - B);
+  const step = Math.max(12, Math.round(maxT / 5 / 12) * 12);
+  let ticks = "";
+  for (let t = 0; t <= maxT; t += step) ticks += `<line x1="${x(t)}" x2="${x(t)}" y1="${H - B}" y2="${H - B + 4}" stroke="var(--line)"/><text x="${x(t)}" y="${H - B + 18}" font-size="13" text-anchor="middle">${t / 12 % 1 === 0 ? t / 12 + "y" : t}</text>`;
+  [0, .25, .5, .75, 1].forEach((v) => { ticks += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-dasharray="${v ? "2 4" : "0"}"/><text x="${L - 6}" y="${y(v) + 4}" font-size="13" text-anchor="end">${v * 100}%</text>`; });
+  const lines = series.map((s, i) => {
+    if (!s.t.length) return "";
+    let d = `M${x(s.t[0])},${y(s.s[0])}`;
+    for (let k = 1; k < s.t.length; k++) d += `H${x(s.t[k])}V${y(s.s[k])}`;
+    return `<path d="${d}" fill="none" stroke="${s.color || PAL[i % 8]}" stroke-width="2.2"/>`;
+  }).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || "Survival curves")}">${ticks}${lines}
+    <text x="${(L + W - R) / 2}" y="${H - 2}" font-size="13" text-anchor="middle">years since diagnosis</text></svg>`;
+}
+function donutSVG(rows, opts = {}) {
+  const total = rows.reduce((a, r) => a + r.n, 0) || 1, R = 70, r0 = 42, C = 90;
+  let a0 = -Math.PI / 2, paths = "";
+  rows.forEach((row, i) => {
+    const a1 = a0 + (row.n / total) * Math.PI * 2, big = a1 - a0 > Math.PI ? 1 : 0;
+    const p = (a, rad) => `${C + rad * Math.cos(a)},${C + rad * Math.sin(a)}`;
+    if (row.n === total) paths += `<circle cx="${C}" cy="${C}" r="${(R + r0) / 2}" fill="none" stroke="${row.color || PAL[i % 8]}" stroke-width="${R - r0}"/>`;
+    else if (row.n > 0) paths += `<path d="M${p(a0, R)}A${R},${R} 0 ${big} 1 ${p(a1, R)}L${p(a1, r0)}A${r0},${r0} 0 ${big} 0 ${p(a0, r0)}Z" fill="${row.color || PAL[i % 8]}"/>`;
+    a0 = a1;
+  });
+  const centre = opts.centre || total.toLocaleString();
+  return `<svg viewBox="0 0 180 180" style="max-width:190px;margin:0 auto" role="img" aria-label="${esc(opts.label || "")}">${paths}
+    <text x="90" y="88" text-anchor="middle" font-size="22" font-weight="700" style="fill:var(--ink)">${esc(centre)}</text>
+    <text x="90" y="106" text-anchor="middle" font-size="11">${esc(opts.unit || "patients")}</text></svg>`;
+}
+function barsSVG(rows, opts = {}) {
+  const W = 300, H = 210, L = 34, B = 40, T = 8, max = Math.max(1, ...rows.map((r) => r.n));
+  const bw = (W - L - 6) / rows.length;
+  const bars = rows.map((r, i) => { const h = (r.n / max) * (H - T - B);
+    return `<rect x="${L + i * bw + 1}" y="${H - B - h}" width="${bw - 2}" height="${h}" rx="2" fill="var(--c1)"><title>${esc(r.label)}: ${r.n}</title></rect>`
+      + (i % 3 === 0 ? `<text x="${L + i * bw + bw / 2}" y="${H - B + 16}" font-size="13" text-anchor="middle">${esc(r.label)}</text>` : ""); }).join("");
+  const y = (v) => H - B - (v / max) * (H - T - B);
+  const grid = [0, .5, 1].map((f) => `<line x1="${L}" x2="${W}" y1="${y(f * max)}" y2="${y(f * max)}" stroke="var(--line)"/><text x="${L - 5}" y="${y(f * max) + 4}" font-size="12" text-anchor="end">${Math.round(f * max)}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || "")}">${grid}${bars}<text x="${(L + W) / 2}" y="${H - 2}" font-size="13" text-anchor="middle">${esc(opts.axis || "")}</text></svg>`;
+}
+function forestSVG(rows) {
+  const W = 640, rowH = 22, T = 18, L = 250, R = 20, H = T + rows.length * rowH + 30;
+  const lo = 0.25, hi = 4, x = (v) => L + (Math.log(Math.max(lo, Math.min(hi, v))) - Math.log(lo)) / (Math.log(hi) - Math.log(lo)) * (W - L - R);
+  let g = [0.25, 0.5, 1, 2, 4].map((v) => `<line x1="${x(v)}" x2="${x(v)}" y1="${T - 6}" y2="${H - 26}" stroke="var(--line)" ${v === 1 ? 'stroke-width="2" style="stroke:var(--muted)"' : 'stroke-dasharray="2 4"'}/><text x="${x(v)}" y="${H - 10}" font-size="11" text-anchor="middle">${v}×</text>`).join("");
+  rows.forEach((r, i) => {
+    const yy = T + i * rowH + rowH / 2, col = { go: "var(--go)", warn: "var(--warn-fill)", stop: "var(--stop)" }[r.k];
+    const label = r.text.length > 44 ? r.text.slice(0, 42) + "…" : r.text;
+    g += `<text x="${L - 8}" y="${yy + 4}" font-size="11" text-anchor="end"><title>${esc(r.text)}</title>${esc(label)}</text>`;
+    if (r.ci) g += `<line x1="${x(r.ci[0])}" x2="${x(r.ci[1])}" y1="${yy}" y2="${yy}" stroke="${col}" stroke-width="3" stroke-linecap="round"/>`;
+    g += `<circle cx="${x(r.hr)}" cy="${yy}" r="5.5" fill="${col}" stroke="var(--surface)" stroke-width="1.5"><title>${esc(r.text)}: ${r.hr.toFixed(2)}×</title></circle>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Risk for each finding">${g}
+    <text x="${x(0.5)}" y="${T - 8}" font-size="11" text-anchor="middle">lower risk</text><text x="${x(2)}" y="${T - 8}" font-size="11" text-anchor="middle">higher risk</text></svg>`;
+}
+
+/* ---------- KM pair on a checked finding ---------- */
+function showKM(res) {
+  const c = res.curves || {};
+  const eps = [["OS", "Counting all deaths"], ["DSS", "Counting breast cancer deaths only"]].filter(([k]) => c[k] && c[k].length);
+  $("r-kmwrap").hidden = !eps.length;
+  if (!eps.length) return;
+  const maxT = Math.max(...eps.flatMap(([k]) => c[k].map((s) => s.max_t || 0)));
+  $("r-km").innerHTML = eps.map(([k, title]) => `<div><h4>${title}</h4>${kmSVG(c[k], { maxT, label: title })}
+    ${legend(c[k].map((s) => ({ label: s.label, n: s.n })))}</div>`).join("");
+  $("r-kmnote").textContent = eps.length === 2
+    ? "Each line shows the share of patients still alive (left) or not yet dead of breast cancer (right) over time. A line that drops faster means that group does worse. If the gap between the lines shrinks or flips from the left chart to the right one, deaths from other causes were driving the result."
+    : "Each line shows the share of patients still alive over time. A line that drops faster means that group does worse.";
+}
+const _showResult = showResult;
+showResult = function (res) { _showResult(res); showKM(res); };
+
+/* ---------- data overview ---------- */
+let DATA_LOADED = false;
+async function loadData(ds) {
+  DATA_LOADED = true;
+  $("d-metabric").setAttribute("aria-pressed", ds === "metabric"); $("d-tcga").setAttribute("aria-pressed", ds === "tcga");
+  $("d-desc").textContent = ds === "tcga" ? "TCGA breast cancer (PanCancer Atlas): US patients, race and genetic ancestry recorded, about 2 years of follow-up."
+    : "METABRIC: UK and Canadian patients diagnosed 1977 to 2005, about 10 years of follow-up, cause of death recorded.";
+  $("d-dash").innerHTML = '<p class="muted">Loading…</p>';
+  const o = await (await fetch(`/api/overview?dataset=${ds}`)).json();
+  $("d-stats").innerHTML = [[o.patients.toLocaleString(), "patients"], [o.with_survival.toLocaleString(), "with survival recorded"],
+    [o.deaths.toLocaleString(), "deaths"], [o.median_follow_up_months ? Math.round(o.median_follow_up_months / 12 * 10) / 10 + " yrs" : "–", "median follow-up"]]
+    .map(([b, t]) => `<div class="stat"><b>${b}</b><span>${t}</span></div>`).join("");
+  const tiles = [];
+  const km = [{ ...o.km_overall, label: "still alive", color: "var(--c1)" }];
+  if (o.km_dss) km.push({ ...o.km_dss, label: "not dead of breast cancer", color: "var(--c2)" });
+  tiles.push(`<div class="tile wide"><h3>Survival over time</h3>${kmSVG(km, { label: "Survival over time" })}${legend(km.map((k) => ({ label: k.label, color: k.color })))}
+    <p class="note">The gap between the two lines is deaths from other causes: older patients often die of something else first.</p></div>`);
+  if (o.deaths_by_cause) {
+    const rows = o.deaths_by_cause.map((r, i) => ({ ...r, color: i ? "var(--c8)" : "var(--stop)" }));
+    tiles.push(`<div class="tile"><h3>What patients died of</h3>${donutSVG(rows, { centre: o.deaths.toLocaleString(), unit: "deaths", label: "Deaths by cause" })}${legend(rows)}
+      <p class="note">Overall survival counts both. This is why Quorum also checks breast cancer deaths alone.</p></div>`);
+  }
+  if (o.age_hist.length) tiles.push(`<div class="tile"><h3>Age at diagnosis</h3>${barsSVG(o.age_hist.map((r) => ({ label: String(r.from), n: r.n })), { axis: "age", label: "Age at diagnosis" })}</div>`);
+  o.panels.forEach((p) => tiles.push(`<div class="tile"><h3>${esc(p.title)}</h3>${donutSVG(p.rows, { label: p.title })}${legend(p.rows)}</div>`));
+  $("d-dash").innerHTML = tiles.join("");
+}
+$("d-metabric").addEventListener("click", () => loadData("metabric"));
+$("d-tcga").addEventListener("click", () => loadData("tcga"));
+
+/* ---------- explore result charts ---------- */
+const _results = results;
+results = function (ev) {
+  _results(ev);
+  const all = Object.values(X.claims).filter((c) => c.label);
+  const n = { go: 0, warn: 0, stop: 0 }; all.forEach((c) => { n[CARD[c.label]] += 1; });
+  $("x-donut").innerHTML = donutSVG([{ label: "Act on it", n: n.go, color: "var(--go)" }, { label: "Check first", n: n.warn, color: "var(--warn-fill)" },
+    { label: "Set aside", n: n.stop, color: "var(--stop)" }], { centre: String(all.length), unit: "findings", label: "Cards given" })
+    + legend([{ label: "Act on it", n: n.go, color: "var(--go)" }, { label: "Check first", n: n.warn, color: "var(--warn-fill)" }, { label: "Set aside", n: n.stop, color: "var(--stop)" }]);
+  const rows = all.map((c) => { const re = (c.checks || []).find((e) => e.referee === "reanalyst" && e.data && e.data.hr);
+    return re ? { text: c.text, hr: re.data.hr, ci: re.data.ci, k: CARD[c.label] } : null; }).filter(Boolean)
+    .sort((a, b) => a.hr - b.hr);
+  $("x-forest").innerHTML = rows.length ? forestSVG(rows) : '<p class="muted small">No findings with numbers to plot.</p>';
+};
+
+/* ---------- code window ---------- */
+const WHAT = {
+  "As claimed": "The finding's own analysis, recomputed from the raw data: Cox proportional hazards model, hazard ratio (HR), 95% confidence interval (CI) and p-value.",
+  "Comparable patients": "The same test, adjusted for age, tumor grade, tumor size and lymph nodes, so like is compared with like.",
+  "Cancer deaths only": "The same adjusted test, counting only deaths from breast cancer (disease-specific survival).",
+  "Second study (TCGA)": "The same test on a separate group of patients, to see if the finding replicates.",
+  "Survival plots": "The Kaplan-Meier survival curves shown with this finding: one line per group, all deaths on the left and breast cancer deaths only on the right.",
+};
+let CODE = [], codeTab = 0;
+function highlight(src) {
+  return esc(src).split("\n").map((line) => {
+    const hash = line.indexOf("#");
+    let code = hash >= 0 ? line.slice(0, hash) : line, comment = hash >= 0 ? line.slice(hash) : "";
+    code = code.replace(/(&quot;[^&]*?&quot;|'[^']*?')/g, '<span class="s">$1</span>')
+      .replace(/\b(import|from|for|in|if|else|print|return|lambda|as)\b/g, '<span class="k">$1</span>')
+      .replace(/\b(\d+(\.\d+)?)\b/g, '<span class="n">$1</span>');
+    return code + (comment ? `<span class="c">${comment}</span>` : "");
+  }).join("\n");
+}
+function renderCode() {
+  $("codeTabs").innerHTML = CODE.map((c, i) => `<button type="button" role="tab" aria-selected="${i === codeTab}" data-i="${i}">${esc(c.title)}</button>`).join("");
+  const c = CODE[codeTab] || { code: "", title: "" };
+  $("codeWhat").textContent = WHAT[c.title] || "";
+  $("codeBox").innerHTML = highlight(c.code);
+}
+function openCode(bundle, title) {
+  CODE = bundle || []; codeTab = 0;
+  $("codeTitle").textContent = title || "";
+  if (!CODE.length) { CODE = [{ title: "No code", code: "# This finding has no analysis to reproduce (an interpretation, or a check that could not run)." }]; }
+  renderCode();
+  $("codeDlg").showModal();
+}
+$("codeTabs").addEventListener("click", (ev) => { const b = ev.target.closest("button"); if (b) { codeTab = +b.dataset.i; renderCode(); } });
+$("codeClose").addEventListener("click", () => $("codeDlg").close());
+$("codeDlg").addEventListener("click", (ev) => { if (ev.target === $("codeDlg")) $("codeDlg").close(); });
+$("codeCopy").addEventListener("click", async () => {
+  const text = (CODE[codeTab] || {}).code || "";
+  try { await navigator.clipboard.writeText(text); $("codeCopy").textContent = "Copied"; }
+  catch { const r = document.createRange(); r.selectNodeContents($("codeBox")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); $("codeCopy").textContent = "Selected: press Cmd+C"; }
+  setTimeout(() => { $("codeCopy").textContent = "Copy code"; }, 1800);
+});
+let LAST_RESULT = null;
+const _showResult2 = showResult;
+showResult = function (res) { LAST_RESULT = res; _showResult2(res); };
+$("r-code").addEventListener("click", () => { if (LAST_RESULT) openCode(LAST_RESULT.code, LAST_RESULT.text); });
+
+setDataset("metabric");
+</script>
+</body>
+</html>

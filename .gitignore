@@ -1,0 +1,33 @@
+# Secrets: never commit
+.env
+**/.env
+*.pem
+*.key
+
+# Someone else's open-source repo (2.5 GB); see README for the link
+kosmos-community/
+
+# Rebuilt automatically
+.venv/
+**/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+quorum/data_cache/
+*.sqlite
+
+# Run outputs
+quorum/runs/
+
+# Local tool settings
+.claude/
+.kiro/
+.DS_Store
+
+# Private planning notes: kept on this Mac only
+BUILD_PLAN.md
+STATUS.md
+PITCH.md
+RESEARCH.md
+KIRO.md

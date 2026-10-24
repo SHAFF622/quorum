@@ -1,0 +1,32 @@
+[project]
+name = "quorum"
+version = "0.1.0"
+description = "A referee panel for AI scientists: blind re-checks of every claim, across runs and wordings."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.40",
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "pandas>=2.1",
+    "pydantic>=2.6",
+    "scipy>=1.11",
+    "statsmodels>=0.14",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+pdf = ["pypdf>=4"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["quorum*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: needs internet access to cBioPortal"]
+addopts = "-m 'not network'"
