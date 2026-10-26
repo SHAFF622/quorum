@@ -94,6 +94,9 @@ def friendly(e: Exception) -> str:
     if "credit balance is too low" in text:
         return ("Your Anthropic account has no credits, so Claude can't run. Add credits at "
                 "console.anthropic.com (Settings, Billing), or choose the free Simple analyst.")
+    if "monthly usage limit" in text:
+        return ("Kiro's monthly AI allowance is used up. Sign in to Kiro with an account that has credits, "
+                "or put a working Anthropic key in quorum/.env.")
     if "authentication" in text.lower() or "invalid x-api-key" in text.lower():
         return "Anthropic didn't accept the API key in quorum/.env. Check it was copied in full."
     if "rate_limit" in text or "429" in text:
@@ -187,7 +190,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(history())
         if path == "/api/status":
             from quorum.kiro_llm import kiro_status
-            return self._json({"has_key": has_key(), "kiro": kiro_status()["logged_in"], "busy": BUSY.locked()})
+            from quorum import paperclip
+            return self._json({"has_key": has_key(), "kiro": kiro_status()["logged_in"], "busy": BUSY.locked(),
+                               "paperclip": paperclip.connected()})
         if path == "/sample.csv":
             from quorum.data import load
             df = load("metabric").dropna(subset=["os_months"]).head(400)
@@ -225,10 +230,19 @@ class Handler(BaseHTTPRequestHandler):
             if not q:
                 return self._json({"error": "Type a question for the papers."}, 400)
             try:
-                return self._json(answer(q, library_for(q), literature_llm()))
+                lib = library_for(q)
             except Exception as e:  # noqa: BLE001
                 traceback.print_exc()
                 return self._json({"error": friendly(e)}, 500)
+            try:
+                return self._json(answer(q, lib, literature_llm()))
+            except Exception as e:  # noqa: BLE001
+                # The AI is out (Kiro credits used up, a bad key...). The search still worked, so show the
+                # best passages instead of an error, and say plainly why there's no written answer.
+                traceback.print_exc()
+                fallback = answer(q, lib, None)
+                fallback["note"] = f"The AI couldn't answer, so these are the best matching passages. ({friendly(e)})"
+                return self._json(fallback)
         if path == "/api/pdf":
             import base64
             from quorum.literature import pdf_sections, rank
@@ -236,12 +250,20 @@ class Handler(BaseHTTPRequestHandler):
             if length > MAX_BODY * 2:
                 return self._json({"error": "That PDF is too large (about 18 MB limit)."}, 413)
             params = json.loads(self.rfile.read(length) or b"{}")
+            raw = base64.b64decode(params.get("data", ""))
+            if not raw.lstrip()[:5] == b"%PDF-":
+                return self._json({"error": "That file isn't really a PDF. It may be a web page saved with a .pdf "
+                                            "name (some sites block downloads). Open it in a browser and use "
+                                            "File → Save As or Print → Save as PDF, then try again."}, 400)
             try:
-                sections = pdf_sections(base64.b64decode(params.get("data", "")))
+                sections = pdf_sections(raw)
             except RuntimeError as e:
                 return self._json({"error": str(e)}, 501)
-            except Exception as e:  # noqa: BLE001 - a broken or scanned PDF
+            except Exception as e:  # noqa: BLE001 - a broken PDF
                 return self._json({"error": f"Could not read that PDF ({e.__class__.__name__})."}, 400)
+            if not sections:
+                return self._json({"error": "No text found in that PDF. It is probably a scan (pictures of pages), "
+                                            "which would need text recognition first."}, 400)
             name = params.get("name") or "your PDF"
             items = [{"pmid": "upload", "title": name, **s} for s in sections]
             top = [r for r in rank(params.get("question") or "breast cancer survival", items)[:8] if r["score"] > 0]

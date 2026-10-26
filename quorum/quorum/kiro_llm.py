@@ -19,6 +19,8 @@ Safety choices:
 from __future__ import annotations
 
 import json
+import os
+import random
 import re
 import shutil
 import subprocess
@@ -58,6 +60,12 @@ class KiroError(RuntimeError):
     pass
 
 
+# Kiro's service throttles when too many calls arrive at once, like a shop that
+# only serves so many customers at a time. Every KiroLLM in this process shares
+# this queue, so the whole site never has more than this many calls in flight.
+SLOTS = threading.BoundedSemaphore(int(os.environ.get("QUORUM_KIRO_PARALLEL", "4")))
+
+
 def _extract_json(text: str) -> str:
     """Kiro may wrap JSON in a code fence or a sentence; take the outermost object."""
     fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.S)
@@ -92,8 +100,8 @@ class KiroLLM:
         kiro_model = self.model_map.get(model, model)
         started = time.monotonic()
         error = None
-        for attempt in range(2):  # one retry: a busy Kiro sometimes drops a call when many run at once
-            with tempfile.TemporaryDirectory(prefix="quorum-kiro-") as blank:
+        for attempt in range(4):
+            with SLOTS, tempfile.TemporaryDirectory(prefix="quorum-kiro-") as blank:
                 try:
                     out = subprocess.run(
                         [KIRO, "chat", "--no-interactive", "--trust-tools=", "--model", kiro_model, prompt],
@@ -105,7 +113,10 @@ class KiroLLM:
                     error = f"Kiro took longer than {self.timeout_s}s."
             if error is None:
                 break
-            time.sleep(2 + 3 * attempt)
+            throttled = "throttl" in error.lower()
+            if not throttled and attempt >= 1:
+                break  # one retry for an ordinary failure
+            time.sleep((5 * 2 ** attempt if throttled else 2) + random.random() * 2)  # wait longer each time
         took = time.monotonic() - started
         with self._lock:
             self.seconds += took

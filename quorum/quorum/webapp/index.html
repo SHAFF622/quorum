@@ -490,6 +490,7 @@ TABS.forEach((t) => $("tab-" + t).addEventListener("click", () => show(t)));
 fetch("/api/status").then((r) => r.json()).then((s) => {
   hasKey = s.has_key; hasKiro = s.kiro;
   $("status").textContent = s.kiro ? "Kiro connected · AI ready" : (s.has_key ? "Claude key found (needs API credits)" : "Free mode · no AI");
+  if (s.paperclip) $("status").textContent += " · Paperclip on";
   if (!s.kiro) $("x-mode").value = "simple";
 }).catch(() => { $("status").textContent = "Server offline"; });
 
@@ -536,6 +537,12 @@ function plainCheck(c) {
       if (/not recorded|doesn't record|no claudin/.test(d)) return "Can't be tested in the second study: it didn't record this.";
       if (/too few deaths/.test(d)) return "The second study leans the same way but has too few deaths to confirm.";
       return "Not tested in a second study.";
+    case "evidence": {
+      const n = (c.data && c.data.counts) || {};
+      if (c.outcome === "contests") return `Published papers lean against this: ${n.refutes} passages refute it, ${n.supports} support it.`;
+      if (c.outcome === "supports") return `Published papers agree: ${n.supports} passages support it, ${n.refutes || 0} refute it.`;
+      return /not connected|unavailable/.test(d) ? "Paperclip wasn't reachable, so the published record wasn't searched." : "No published passage clearly supports or refutes it.";
+    }
     case "librarian":
       if (c.outcome === "supports") return "Read the cited papers: they back this sentence.";
       if (c.outcome === "contests") return "Read the cited papers: at least one is off-topic or too weak to back this.";
@@ -802,6 +809,7 @@ function paperHTML(p) {
       <div class="links">${p.links.pubmed ? `<a href="${esc(p.links.pubmed)}" target="_blank" rel="noopener">PubMed</a>` : ""}
         ${p.links.pmc ? `<a href="${esc(p.links.pmc)}" target="_blank" rel="noopener">Full text</a>` : ""}
         ${p.links.pdf ? `<a href="${esc(p.links.pdf)}" target="_blank" rel="noopener">PDF</a>` : ""}
+        ${p.links.paperclip ? `<a href="${esc(p.links.paperclip)}" target="_blank" rel="noopener">Paperclip</a>` : ""}
         <button type="button" class="linkbtn" data-read="${esc(p.pmid)}">Read it for my question →</button></div>
       <div class="reader" id="reader-${esc(p.pmid)}" hidden></div>` : ""}
   </div>`;
@@ -810,7 +818,7 @@ function renderLit() {
   const d = LIT.data; if (!d) return;
   const full = d.papers.filter((p) => p.full_text).length;
   $("lit-status").innerHTML = `${d.papers.length} papers · ${full} read in full · ${d.passages.length} strong passages<br>Ranked for: <i>${esc(d.question)}</i>`;
-  const shelves = [["Pan-Cancer Atlas", "TCGA Pan-Cancer Atlas"], ["Found by search", "Found by search on Europe PMC"]];
+  const shelves = [["Pan-Cancer Atlas", "TCGA Pan-Cancer Atlas"], ["Found by Paperclip", "Found by Paperclip (full-text search)"], ["Found by search", "Found by search on Europe PMC"]];
   $("lit-list").innerHTML = shelves.map(([key, label]) => {
     const ps = d.papers.filter((p) => p.shelf === key);
     return ps.length ? `<div class="shelf"><span>${label}</span><span>${ps.length}</span></div>${ps.map(paperHTML).join("")}` : "";
@@ -853,7 +861,8 @@ $("lit-ask").addEventListener("click", async () => {
     const body = await r.json();
     if (!r.ok) throw new Error(body.error || "Could not answer.");
     $("lit-answer").innerHTML = `<div class="answer"><span class="label">Answer · ${esc(body.by)}</span><p>${citeLinks(body.text)}</p>
-      ${body.made_up && body.made_up.length ? `<p class="error">Cited a paper that wasn't in the passages: ${body.made_up.map(esc).join(", ")}</p>` : ""}</div>`;
+      ${body.note ? `<p class="muted">${esc(body.note)}</p>` : ""}
+      ${body.made_up && body.made_up.length ?`<p class="error">Cited a paper that wasn't in the passages: ${body.made_up.map(esc).join(", ")}</p>` : ""}</div>`;
     LIT.q = null; loadLit(q);
   } catch (err) { $("lit-answer").innerHTML = `<p class="error">${esc(err.message)}</p>`; }
   $("lit-ask").disabled = false; $("lit-ask-note").textContent = "";
@@ -872,7 +881,8 @@ async function readPDF(file) {
       ${body.passages.map((x) => `<div class="passage"><span class="src">${esc(x.section)} · score ${x.score}</span>${esc(x.text)}</div>`).join("") || `<p class="small muted">Nothing in it matches your question's words.</p>`}`;
   } catch (err) { $("lit-pdf-out").innerHTML = `<p class="error">${esc(err.message)}</p>`; }
 }
-$("lit-pdf").addEventListener("change", () => readPDF($("lit-pdf").files[0]));
+// Clear the picker after each read, so choosing the same file again still works.
+$("lit-pdf").addEventListener("change", () => { readPDF($("lit-pdf").files[0]); $("lit-pdf").value = ""; });
 const drop = document.querySelector(".drop");
 ["dragover", "dragenter"].forEach((n) => drop.addEventListener(n, (e) => { e.preventDefault(); drop.classList.add("over"); }));
 ["dragleave", "drop"].forEach((n) => drop.addEventListener(n, () => drop.classList.remove("over")));

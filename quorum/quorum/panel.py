@@ -72,6 +72,9 @@ def judge(claim: Claim, cohorts: dict[str, pd.DataFrame], llm: LLM | None, use_s
         add(replicate(planned_claim.spec, ref, cohorts))
     if claim.citations and llm is not None:
         add(check_citations(seen, llm))
+    from quorum import paperclip
+    if paperclip.connected():
+        add(paperclip.claim_evidence(seen))
     if use_skeptic and llm is not None:
         add(skeptic(seen, reanalysis, flags, llm, context=context if claim.type.value == "interpretation" else None))
 

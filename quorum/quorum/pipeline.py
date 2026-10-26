@@ -43,6 +43,7 @@ REFEREE_NAMES = {
     "adjuster": "Fair-comparison check",
     "replicator": "Second opinion (other patients)",
     "librarian": "Citation checker",
+    "evidence": "Published-evidence checker",
     "skeptic": "Skeptic",
     "consensus": "Agreement across runs",
 }
@@ -52,6 +53,7 @@ REFEREE_JOBS = {
     "adjuster": "Re-runs it on comparable patients, and counting only cancer deaths.",
     "replicator": "Re-runs it on a separate group of patients (TCGA).",
     "librarian": "Checks that cited papers support the sentence.",
+    "evidence": "Searches published papers (via Paperclip) for passages that support or refute the finding.",
     "skeptic": "Asks whether the conclusion goes beyond the numbers.",
     "consensus": "Checks whether independent runs found the same thing.",
 }
@@ -209,7 +211,7 @@ def run_pipeline(question: str, dataset: str, mode: str, emit: Emit, upload: Opt
             emit({"stage": "referee", "claim_id": c.claim_id, "referee": e.referee,
                   "name": REFEREE_NAMES.get(e.referee, e.referee), "job": REFEREE_JOBS.get(e.referee, ""),
                   "outcome": e.outcome, "detail": e.detail,
-                  "data": {k: v for k, v in e.data.items() if k in ("hr", "ci", "p_value", "n", "events", "papers", "missing")}})
+                  "data": {k: v for k, v in e.data.items() if k in ("hr", "ci", "p_value", "n", "events", "papers", "missing", "supports", "refutes", "counts")}})
 
         try:
             v = judge(c, cohorts, llm, on_evidence=on_evidence, declared_endpoint=declared,

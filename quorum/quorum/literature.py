@@ -10,7 +10,8 @@ later confirms each cited paper really backs the sentence citing it.
 Where the papers come from:
 - A starter shelf: the TCGA Pan-Cancer Atlas papers (the project that produced
   the TCGA data Quorum uses). Listed at gdc.cancer.gov/about-data/publications/pancanatlas.
-- A live search of Europe PMC (40+ million abstracts, free, no key) for more.
+- A live search for more: Paperclip's full-text index when a key is set
+  (paperclip.py), otherwise Europe PMC (40+ million abstracts, free, no key).
 - Full text, when a paper is open in PubMed Central: Europe PMC first, then
   NCBI (set NCBI_API_KEY for a higher rate limit). This is better than reading
   the PDF because the text comes already split into sections.
@@ -249,15 +250,21 @@ def library(question: str, pmids: Optional[list[str]] = None, extra: int = 6, de
     shelf = fetch_papers(pmids or PANCAN_PMIDS)
     for p in shelf:
         p["shelf"] = "Pan-Cancer Atlas"
-    found = []
+    found, shelf_name = [], "Found by search"
     if extra:
+        from quorum import paperclip
+        known = {p["pmid"] for p in shelf}
         try:
-            known = {p["pmid"] for p in shelf}
-            found = [p for p in search(question, n=extra + 4) if p["pmid"] not in known][:extra]
-        except httpx.HTTPError:
-            found = []
+            if paperclip.connected():
+                found, shelf_name = paperclip.search(question, n=extra + 4), "Found by Paperclip"
+            else:
+                found = search(question, n=extra + 4)
+        except (httpx.HTTPError, paperclip.PaperclipError):
+            found = search(question, n=extra + 4) if paperclip.connected() else []
+            shelf_name = "Found by search"
+        found = [p for p in found if p["pmid"] not in known][:extra]
         for p in found:
-            p["shelf"] = "Found by search"
+            p["shelf"] = shelf_name
     papers = shelf + found
 
     pool = []
